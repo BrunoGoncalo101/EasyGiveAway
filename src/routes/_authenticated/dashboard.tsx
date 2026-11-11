@@ -48,8 +48,8 @@ type EventWithEntries = EventRow & {
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
-      { title: "Os meus giveaways — Sorteio" },
-      { name: "description", content: "Painel do organizador de sorteios." },
+      { title: "Os meus giveaways — Easy Giveaway" },
+      { name: "description", content: "Painel do organizador — Easy Giveaway." },
     ],
   }),
   component: Dashboard,

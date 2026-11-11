@@ -11,9 +11,9 @@ import { Gift, ArrowLeft, Loader2, AlertCircle, ExternalLink } from "lucide-reac
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Entrar — Sorteio" },
+      { title: "Entrar — Easy Giveaway" },
       { name: "description", content: "Acede ao painel do organizador de giveaways." },
-      { property: "og:title", content: "Entrar — Sorteio" },
+      { property: "og:title", content: "Entrar — Easy Giveaway" },
       { property: "og:description", content: "Acede ao painel do organizador de giveaways." },
     ],
   }),

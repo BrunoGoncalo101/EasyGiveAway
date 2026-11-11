@@ -66,7 +66,7 @@ function Layout() {
             <span className="grid size-9 place-items-center rounded-xl bg-hero text-primary-foreground shadow-pop">
               <Gift className="size-5" />
             </span>
-            Sorteio
+            Easy Giveaway
           </Link>
 
           <div className="flex items-center gap-3">

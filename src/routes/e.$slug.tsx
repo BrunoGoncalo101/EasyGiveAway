@@ -13,9 +13,9 @@ import { Gift, PartyPopper, Lock, Loader2, CheckCircle2, ArrowLeft } from "lucid
 export const Route = createFileRoute("/e/$slug")({
   head: () => ({
     meta: [
-      { title: "Participa no giveaway — Sorteio" },
+      { title: "Participa no giveaway — Easy Giveaway" },
       { name: "description", content: "Inscreve-te e habilita-te a ganhar prémios fantásticos." },
-      { property: "og:title", content: "Participa no giveaway — Sorteio" },
+      { property: "og:title", content: "Participa no giveaway — Easy Giveaway" },
       {
         property: "og:description",
         content: "Inscreve-te e habilita-te a ganhar prémios fantásticos.",
@@ -138,7 +138,7 @@ function PublicEvent() {
             <span className="grid size-9 place-items-center rounded-xl bg-hero text-primary-foreground shadow-pop">
               <Gift className="size-5" />
             </span>
-            Sorteio
+            Easy Giveaway
           </Link>
         </div>
 
@@ -251,7 +251,7 @@ function PublicEvent() {
       </div>
 
       <footer className="mx-auto max-w-xl text-center py-6 text-xs text-muted-foreground">
-        Powered by <span className="font-bold text-foreground">Sorteio</span> — Plataforma de Giveaways Justos
+        Powered by <span className="font-bold text-foreground">Easy Giveaway</span> — Plataforma de Giveaways Justos
       </footer>
     </div>
   );

@@ -28,8 +28,8 @@ import { StatusBadge } from "@/components/StatusBadge";
 export const Route = createFileRoute("/_authenticated/events/$id")({
   head: () => ({
     meta: [
-      { title: "Gerir evento — Sorteio" },
-      { name: "description", content: "Gestão do giveaway e sorteio." },
+      { title: "Gerir evento — Easy Giveaway" },
+      { name: "description", content: "Gestão do giveaway e sorteio — Easy Giveaway." },
     ],
   }),
   component: EventAdmin,

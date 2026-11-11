@@ -16,13 +16,13 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Sorteio — Gestão de Giveaways e Sorteios em Tempo Real" },
+      { title: "Easy Giveaway — Gestão de Giveaways e Sorteios em Tempo Real" },
       {
         name: "description",
         content:
           "Cria giveaways, partilha o link e QR code, acompanha inscrições em tempo real e sorteia o vencedor com transparência total.",
       },
-      { property: "og:title", content: "Sorteio — Gestão de Giveaways" },
+      { property: "og:title", content: "Easy Giveaway — Gestão de Giveaways" },
       {
         property: "og:description",
         content:
@@ -50,7 +50,7 @@ function Index() {
           <span className="grid size-10 place-items-center rounded-2xl bg-hero text-primary-foreground shadow-pop">
             <Gift className="size-5" />
           </span>
-          Sorteio
+          Easy Giveaway
         </div>
         <div className="flex items-center gap-3">
           {hasSession ? (
@@ -147,7 +147,7 @@ function Index() {
       <footer className="mx-auto max-w-6xl border-t-2 border-foreground py-8 text-center text-sm text-muted-foreground flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2 font-display font-bold text-foreground">
           <Gift className="size-4 text-primary" />
-          Sorteio
+          Easy Giveaway
         </div>
         <p className="text-xs">
           Giveaways e sorteios justos para criadores, marcas e comunidades.
