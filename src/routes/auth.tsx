@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
@@ -6,62 +6,336 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Gift } from "lucide-react";
+import { Gift, ArrowLeft, Loader2, KeyRound } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
-  head: () => ({ meta: [
-    { title: "Entrar — Sorteio" }, { name: "description", content: "Acede ao painel do organizador de giveaways." },
-    { property: "og:title", content: "Entrar — Sorteio" }, { property: "og:description", content: "Acede ao painel do organizador de giveaways." },
-  ] }),
+  head: () => ({
+    meta: [
+      { title: "Entrar — Sorteio" },
+      { name: "description", content: "Acede ao painel do organizador de giveaways." },
+      { property: "og:title", content: "Entrar — Sorteio" },
+      { property: "og:description", content: "Acede ao painel do organizador de giveaways." },
+    ],
+  }),
   component: AuthPage,
 });
 
 function AuthPage() {
   const nav = useNavigate();
-  const [mode, setMode] = useState<"in" | "up">("in");
-  const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<"in" | "up" | "reset">("in");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => { if (data.session) nav({ to: "/dashboard" }); });
-    const { data: sub } = supabase.auth.onAuthStateChange((e, s) => { if (s && e === "SIGNED_IN") nav({ to: "/dashboard" }); });
-    return () => sub.subscription.unsubscribe();
+    let active = true;
+
+    // Verificar se já existe uma sessão ou se acabámos de chegar via redirect OAuth
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!active) return;
+        if (data?.session) {
+          nav({ to: "/dashboard" });
+        } else {
+          setCheckingSession(false);
+        }
+      })
+      .catch(() => {
+        if (active) setCheckingSession(false);
+      });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && (event === "SIGNED_IN" || event === "USER_UPDATED")) {
+        toast.success("Sessão iniciada com sucesso!");
+        nav({ to: "/dashboard" });
+      }
+    });
+
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
   }, [nav]);
 
   async function submit(e: React.FormEvent) {
-    e.preventDefault(); setBusy(true);
-    if (mode === "in") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) toast.error("Email ou palavra-passe incorretos");
-    } else {
-      const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin + "/dashboard" } });
-      if (error) toast.error(error.message);
-      else if (!data.session) toast.success("Verifica o teu email para confirmar a conta.");
+    e.preventDefault();
+    if (!email.trim()) return void toast.error("Por favor insere o teu email");
+
+    setBusy(true);
+    try {
+      if (mode === "reset") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}/dashboard`,
+        });
+        if (error) {
+          toast.error(error.message || "Não foi possível enviar o email de recuperação.");
+        } else {
+          toast.success("Enviámos um link de recuperação para o teu email.");
+          setMode("in");
+        }
+      } else if (mode === "in") {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (error) {
+          toast.error("Email ou palavra-passe incorretos.");
+        }
+      } else {
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/dashboard`,
+          },
+        });
+        if (error) {
+          toast.error(error.message);
+        } else if (!data.session) {
+          toast.success("Verifica o teu email para confirmar a conta.");
+        }
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Ocorreu um erro inesperado.");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
-  async function google() {
-    const r = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + "/auth" });
-    if (r.error) toast.error("Não foi possível entrar com Google");
+
+  async function handleGoogleLogin() {
+    setGoogleBusy(true);
+    const redirectUrl = `${window.location.origin}/dashboard`;
+
+    try {
+      // 1. Em ambiente de iframe/preview do Lovable, tentar primeiro o broker interno
+      const isLovableHost =
+        typeof window !== "undefined" &&
+        (window.location.hostname.includes("lovable") || window.location.hostname.includes("gpt-eng"));
+
+      if (isLovableHost) {
+        try {
+          const r = await lovable.auth.signInWithOAuth("google", {
+            redirect_uri: redirectUrl,
+          });
+
+          if (!r.error) {
+            if (!r.redirected) {
+              nav({ to: "/dashboard" });
+            }
+            return;
+          }
+          console.warn("[Auth] Lovable broker retornou erro, a usar Supabase OAuth nativo:", r.error);
+        } catch (err) {
+          console.warn("[Auth] Lovable broker falhou:", err);
+        }
+      }
+
+      // 2. Supabase OAuth nativo (padrão universal, compatível com local, produção e qualquer domínio)
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: "offline",
+            prompt: "select_account",
+          },
+        },
+      });
+
+      if (error) {
+        console.error("[Auth] Erro no Supabase signInWithOAuth:", error);
+        toast.error(`Não foi possível entrar com o Google: ${error.message}`);
+      } else if (data?.url) {
+        // Redirecionamento explícito para o fluxo OAuth
+        window.location.href = data.url;
+      }
+    } catch (err: any) {
+      console.error("[Auth] Exceção no login Google:", err);
+      toast.error(err?.message || "Ocorreu um erro ao iniciar sessão com o Google.");
+    } finally {
+      setGoogleBusy(false);
+    }
   }
-  return (
-    <div className="grid min-h-screen place-items-center px-4">
-      <div className="w-full max-w-sm rounded-3xl border-2 border-foreground bg-card p-8 shadow-pop">
-        <div className="mb-6 flex items-center gap-2">
-          <span className="grid size-10 place-items-center rounded-xl bg-hero text-primary-foreground"><Gift /></span>
-          <h1 className="text-2xl font-bold">{mode === "in" ? "Entrar" : "Criar conta"}</h1>
+
+  if (checkingSession) {
+    return (
+      <div className="grid min-h-screen place-items-center px-4 bg-background">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground animate-pulse">
+          <span className="grid size-12 place-items-center rounded-2xl bg-hero text-primary-foreground shadow-pop">
+            <Gift className="size-6 animate-bounce" />
+          </span>
+          <p className="text-sm font-medium">A verificar sessão…</p>
         </div>
-        <form onSubmit={submit} className="space-y-4">
-          <div><Label>Email</Label><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-          <div><Label>Palavra-passe</Label><Input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} /></div>
-          <Button variant="hero" size="lg" className="w-full" disabled={busy}>{mode === "in" ? "Entrar" : "Criar conta"}</Button>
-        </form>
-        <div className="my-4 text-center text-xs text-muted-foreground">ou</div>
-        <Button type="button" variant="outline" size="lg" className="w-full" onClick={google}>
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[18px]"><path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.170 3.56-8.82z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.110-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"/><path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/></svg>
-          Continuar com Google
-        </Button>
-        <button type="button" className="mt-6 w-full text-sm text-muted-foreground underline" onClick={() => setMode(mode === "in" ? "up" : "in")}>
-          {mode === "in" ? "Não tens conta? Cria uma" : "Já tens conta? Entra"}
-        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid min-h-screen place-items-center px-4 py-8 bg-background">
+      <div className="w-full max-w-sm">
+        <Link
+          to="/"
+          className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+          Voltar ao início
+        </Link>
+
+        <div className="rounded-3xl border-2 border-foreground bg-card p-8 shadow-pop">
+          <div className="mb-6 flex items-center gap-3">
+            <span className="grid size-11 place-items-center rounded-2xl bg-hero text-primary-foreground shadow-sm">
+              <Gift className="size-6" />
+            </span>
+            <div>
+              <h1 className="text-2xl font-bold leading-tight">
+                {mode === "in" && "Entrar"}
+                {mode === "up" && "Criar conta"}
+                {mode === "reset" && "Recuperar conta"}
+              </h1>
+              <p className="text-xs text-muted-foreground">
+                {mode === "in" && "Acede ao teu painel de giveaways"}
+                {mode === "up" && "Começa a sortear em poucos minutos"}
+                {mode === "reset" && "Vamos enviar-te um email de recuperação"}
+              </p>
+            </div>
+          </div>
+
+          {mode !== "reset" && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="w-full font-semibold border-2 border-foreground hover:bg-muted/80 transition-all flex items-center justify-center gap-2"
+                onClick={handleGoogleLogin}
+                disabled={googleBusy || busy}
+              >
+                {googleBusy ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 shrink-0">
+                    <path
+                      fill="#4285F4"
+                      d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.170 3.56-8.82z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.110-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
+                    />
+                  </svg>
+                )}
+                <span>{googleBusy ? "A conectar com o Google…" : "Continuar com Google"}</span>
+              </Button>
+
+              <div className="relative my-5 text-center text-xs text-muted-foreground">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <span className="relative bg-card px-2 uppercase tracking-wider text-[11px]">
+                  ou com email
+                </span>
+              </div>
+            </>
+          )}
+
+          <form onSubmit={submit} className="space-y-4">
+            <div>
+              <Label htmlFor="email" className="text-xs font-semibold">
+                Email
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                required
+                placeholder="exemplo@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="mt-1"
+                disabled={busy || googleBusy}
+              />
+            </div>
+
+            {mode !== "reset" && (
+              <div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password" className="text-xs font-semibold">
+                    Palavra-passe
+                  </Label>
+                  {mode === "in" && (
+                    <button
+                      type="button"
+                      onClick={() => setMode("reset")}
+                      className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+                    >
+                      Esqueceste-te?
+                    </button>
+                  )}
+                </div>
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder="No mínimo 6 caracteres"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="mt-1"
+                  disabled={busy || googleBusy}
+                />
+              </div>
+            )}
+
+            <Button
+              variant="hero"
+              size="lg"
+              className="w-full font-bold mt-2"
+              disabled={busy || googleBusy}
+            >
+              {busy ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="size-4 animate-spin" /> A processar…
+                </span>
+              ) : mode === "in" ? (
+                "Entrar"
+              ) : mode === "up" ? (
+                "Criar conta"
+              ) : (
+                "Enviar link de recuperação"
+              )}
+            </Button>
+          </form>
+
+          <div className="mt-6 flex flex-col items-center gap-2 text-center text-sm">
+            {mode === "reset" ? (
+              <button
+                type="button"
+                className="text-sm text-muted-foreground hover:text-foreground underline"
+                onClick={() => setMode("in")}
+              >
+                Voltar ao início de sessão
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="text-sm text-muted-foreground hover:text-foreground underline"
+                onClick={() => setMode(mode === "in" ? "up" : "in")}
+              >
+                {mode === "in" ? "Ainda não tens conta? Cria uma" : "Já tens conta? Entra"}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
