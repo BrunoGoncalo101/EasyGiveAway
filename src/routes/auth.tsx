@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Gift, ArrowLeft, Loader2, KeyRound } from "lucide-react";
+import { Gift, ArrowLeft, Loader2, AlertCircle, ExternalLink } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -28,11 +28,35 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [oauthErrorDetails, setOauthErrorDetails] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
 
-    // Verificar se já existe uma sessão ou se acabámos de chegar via redirect OAuth
+    // 1. Verificar se a URL contém erro de callback OAuth (ex: #error=... ou ?error=...)
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "";
+      const search = window.location.search.startsWith("?") ? window.location.search.slice(1) : "";
+      const queryParams = new URLSearchParams(hash || search);
+
+      const err = queryParams.get("error_description") || queryParams.get("error");
+      if (err) {
+        const decoded = decodeURIComponent(err);
+        console.warn("[Auth OAuth Callback Error]:", decoded);
+        setOauthErrorDetails(decoded);
+
+        if (decoded.includes("missing OAuth secret") || decoded.includes("Unsupported provider")) {
+          toast.error("O Google OAuth ainda não está configurado no painel do Supabase.");
+        } else {
+          toast.error(decoded);
+        }
+
+        // Limpar parâmetros da barra de endereço para manter a URL limpa
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+
+    // 2. Verificar se já existe uma sessão ativa ou tokens válidos
     supabase.auth
       .getSession()
       .then(({ data }) => {
@@ -47,6 +71,7 @@ function AuthPage() {
         if (active) setCheckingSession(false);
       });
 
+    // 3. Ouvir alterações de estado de autenticação
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (session && (event === "SIGNED_IN" || event === "USER_UPDATED")) {
         toast.success("Sessão iniciada com sucesso!");
@@ -107,10 +132,13 @@ function AuthPage() {
 
   async function handleGoogleLogin() {
     setGoogleBusy(true);
-    const redirectUrl = `${window.location.origin}/dashboard`;
+    setOauthErrorDetails(null);
+
+    // O redirect deve apontar de volta para /auth onde processamos a sessão ou os erros
+    const redirectUrl = `${window.location.origin}/auth`;
 
     try {
-      // 1. Em ambiente de iframe/preview do Lovable, tentar primeiro o broker interno
+      // 1. Se estivermos num iframe/preview gerido pelo Lovable, tentar primeiro o broker
       const isLovableHost =
         typeof window !== "undefined" &&
         (window.location.hostname.includes("lovable") || window.location.hostname.includes("gpt-eng"));
@@ -127,13 +155,13 @@ function AuthPage() {
             }
             return;
           }
-          console.warn("[Auth] Lovable broker retornou erro, a usar Supabase OAuth nativo:", r.error);
+          console.warn("[Auth] Lovable broker retornou erro:", r.error);
         } catch (err) {
-          console.warn("[Auth] Lovable broker falhou:", err);
+          console.warn("[Auth] Lovable broker exceção:", err);
         }
       }
 
-      // 2. Supabase OAuth nativo (padrão universal, compatível com local, produção e qualquer domínio)
+      // 2. Supabase OAuth nativo
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -146,10 +174,15 @@ function AuthPage() {
       });
 
       if (error) {
-        console.error("[Auth] Erro no Supabase signInWithOAuth:", error);
-        toast.error(`Não foi possível entrar com o Google: ${error.message}`);
+        console.error("[Auth] Erro retornado pelo Supabase signInWithOAuth:", error);
+        if (error.message.includes("missing OAuth secret") || error.message.includes("Unsupported provider")) {
+          setOauthErrorDetails("O Google OAuth requer que configures o Client ID e Client Secret no painel do Supabase.");
+          toast.error("Google OAuth ainda não configurado no Supabase.");
+        } else {
+          toast.error(error.message);
+        }
       } else if (data?.url) {
-        // Redirecionamento explícito para o fluxo OAuth
+        // Redirecionamento explícito para o Google OAuth URL
         window.location.href = data.url;
       }
     } catch (err: any) {
@@ -202,6 +235,19 @@ function AuthPage() {
               </p>
             </div>
           </div>
+
+          {/* Alerta caso o Google Provider ainda não esteja configurado no Supabase */}
+          {oauthErrorDetails && (
+            <div className="mb-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-800 dark:text-amber-200 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold">
+                <AlertCircle className="size-4 shrink-0 text-amber-500" />
+                <span>Configuração Google pendente</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                O fornecedor Google precisa de ter o <strong>Client ID</strong> e <strong>Secret</strong> preenchidos nas definições do teu projeto Supabase. Podes entrar entretanto com email e password abaixo.
+              </p>
+            </div>
+          )}
 
           {mode !== "reset" && (
             <>
