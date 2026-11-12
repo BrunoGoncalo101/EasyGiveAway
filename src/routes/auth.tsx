@@ -5,8 +5,15 @@ import { lovable } from "@/integrations/lovable/index";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Gift, ArrowLeft, Loader2, AlertCircle, KeyRound, ShieldAlert } from "lucide-react";
+import { Gift, ArrowLeft, Loader2, AlertCircle, KeyRound, ShieldAlert, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -32,6 +39,11 @@ function AuthPage() {
   const [googleBusy, setGoogleBusy] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [oauthErrorDetails, setOauthErrorDetails] = useState<string | null>(null);
+
+  // Estado para validação do código de convite no login com Google
+  const [googleModalOpen, setGoogleModalOpen] = useState(false);
+  const [googleInviteInput, setGoogleInviteInput] = useState("");
+  const [googleInviteError, setGoogleInviteError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -151,7 +163,42 @@ function AuthPage() {
     }
   }
 
-  async function handleGoogleLogin() {
+  function handleGoogleButtonClick() {
+    const configuredInviteCode = import.meta.env.VITE_INVITE_CODE;
+    const isAlreadyVerified =
+      typeof window !== "undefined" &&
+      sessionStorage.getItem("easygiveaway_invite_verified") === "true";
+
+    // Se o código estiver configurado e ainda não tiver sido validado nesta sessão:
+    if (configuredInviteCode && !isAlreadyVerified) {
+      setGoogleInviteError(null);
+      setGoogleInviteInput("");
+      setGoogleModalOpen(true);
+      return;
+    }
+
+    // Se já estiver validado ou se não houver código exigido:
+    executeGoogleSignIn();
+  }
+
+  function confirmGoogleInviteCode(e: React.FormEvent) {
+    e.preventDefault();
+    const configuredInviteCode = import.meta.env.VITE_INVITE_CODE;
+
+    if (configuredInviteCode && googleInviteInput.trim() !== configuredInviteCode.trim()) {
+      setGoogleInviteError("Código de convite inválido. Pede acesso ao administrador.");
+      return;
+    }
+
+    // Código correto: guardar validação na sessão e avançar para o Google
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("easygiveaway_invite_verified", "true");
+    }
+    setGoogleModalOpen(false);
+    executeGoogleSignIn();
+  }
+
+  async function executeGoogleSignIn() {
     setGoogleBusy(true);
     setOauthErrorDetails(null);
 
@@ -262,15 +309,14 @@ function AuthPage() {
             </div>
           )}
 
-          {/* Botão Google apenas visível no modo de Entrada (quem já tem conta entra direto) */}
-          {mode === "in" && (
+          {mode !== "reset" && (
             <>
               <Button
                 type="button"
                 variant="outline"
                 size="lg"
                 className="w-full font-semibold border-2 border-foreground hover:bg-muted/80 transition-all flex items-center justify-center gap-2"
-                onClick={handleGoogleLogin}
+                onClick={handleGoogleButtonClick}
                 disabled={googleBusy || busy}
               >
                 {googleBusy ? (
@@ -375,7 +421,7 @@ function AuthPage() {
               </div>
             )}
 
-            {/* Campo Código de Convite (apenas no registo) */}
+            {/* Campo Código de Convite (apenas no registo por email) */}
             {mode === "up" && (
               <div className="pt-1">
                 <div className="flex items-center justify-between mb-1">
@@ -455,6 +501,68 @@ function AuthPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal para pedir código de convite no login com Google */}
+      <Dialog open={googleModalOpen} onOpenChange={setGoogleModalOpen}>
+        <DialogContent className="sm:max-w-md border-2 border-foreground">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl font-bold flex items-center gap-2">
+              <span className="grid size-8 place-items-center rounded-lg bg-hero text-primary-foreground text-sm">
+                <KeyRound className="size-4" />
+              </span>
+              Acesso com Google
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground pt-1">
+              O acesso como organizador é exclusivo. Insere o código de convite para autorizar a ligação com a tua conta Google.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={confirmGoogleInviteCode} className="space-y-4 pt-2">
+            <div>
+              <Label htmlFor="googleInvite" className="text-xs font-semibold">
+                Código de Convite
+              </Label>
+              <Input
+                id="googleInvite"
+                type="text"
+                autoFocus
+                required
+                placeholder="Insere o código de acesso"
+                value={googleInviteInput}
+                onChange={(e) => {
+                  setGoogleInviteInput(e.target.value);
+                  if (googleInviteError) setGoogleInviteError(null);
+                }}
+                className={`mt-1 border-2 ${googleInviteError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+              />
+              {googleInviteError ? (
+                <p className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-destructive">
+                  <ShieldAlert className="size-3.5 shrink-0" />
+                  {googleInviteError}
+                </p>
+              ) : (
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Pede o código ao administrador caso ainda não o tenhas.
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-2 justify-end pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setGoogleModalOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button variant="hero" size="sm" className="font-bold shadow-pop">
+                Validar e Continuar
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

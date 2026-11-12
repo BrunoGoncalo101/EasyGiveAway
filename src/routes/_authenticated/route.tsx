@@ -10,16 +10,31 @@ export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async () => {
     // 1. Tentar ler sessão atual (restaurada de localStorage ou hash OAuth)
     const { data: sessionData } = await supabase.auth.getSession();
-    if (sessionData?.session?.user) {
-      return { user: sessionData.session.user };
-    }
+    let user = sessionData?.session?.user;
 
     // 2. Confirmação com getUser caso a sessão esteja em revalidação
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) {
+    if (!user) {
+      const { data } = await supabase.auth.getUser();
+      user = data.user ?? undefined;
+    }
+
+    if (!user) {
       throw redirect({ to: "/auth" });
     }
-    return { user: data.user };
+
+    // 3. Blindagem de convite para novas contas Google:
+    // Se a conta acabou de ser criada (últimos 60s) e não tem validação de convite nesta sessão
+    const requiredCode = import.meta.env.VITE_INVITE_CODE;
+    if (requiredCode && typeof window !== "undefined") {
+      const isNewAccount = user.created_at && Date.now() - new Date(user.created_at).getTime() < 60000;
+      const isVerified = sessionStorage.getItem("easygiveaway_invite_verified") === "true";
+      if (isNewAccount && !isVerified) {
+        await supabase.auth.signOut();
+        throw redirect({ to: "/auth" });
+      }
+    }
+
+    return { user };
   },
   component: Layout,
 });
