@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Gift, ArrowLeft, Loader2, AlertCircle, ExternalLink } from "lucide-react";
+import { Gift, ArrowLeft, Loader2, AlertCircle, KeyRound, ShieldAlert } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -23,8 +23,11 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const nav = useNavigate();
   const [mode, setMode] = useState<"in" | "up" | "reset">("in");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
@@ -33,7 +36,7 @@ function AuthPage() {
   useEffect(() => {
     let active = true;
 
-    // 1. Verificar se a URL contém erro de callback OAuth (ex: #error=... ou ?error=...)
+    // 1. Verificar se a URL contém erro de callback OAuth
     if (typeof window !== "undefined") {
       const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "";
       const search = window.location.search.startsWith("?") ? window.location.search.slice(1) : "";
@@ -51,12 +54,11 @@ function AuthPage() {
           toast.error(decoded);
         }
 
-        // Limpar parâmetros da barra de endereço para manter a URL limpa
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     }
 
-    // 2. Verificar se já existe uma sessão ativa ou tokens válidos
+    // 2. Verificar se já existe uma sessão ativa
     supabase.auth
       .getSession()
       .then(({ data }) => {
@@ -71,7 +73,7 @@ function AuthPage() {
         if (active) setCheckingSession(false);
       });
 
-    // 3. Ouvir alterações de estado de autenticação
+    // 3. Ouvir alterações de autenticação
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (session && (event === "SIGNED_IN" || event === "USER_UPDATED")) {
         toast.success("Sessão iniciada com sucesso!");
@@ -87,6 +89,8 @@ function AuthPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    setInviteError(null);
+
     if (!email.trim()) return void toast.error("Por favor insere o teu email");
 
     setBusy(true);
@@ -110,17 +114,34 @@ function AuthPage() {
           toast.error("Email ou palavra-passe incorretos.");
         }
       } else {
+        // Modo "up" (Criar conta): validação do Código de Convite
+        const configuredInviteCode = import.meta.env.VITE_INVITE_CODE;
+        if (configuredInviteCode && inviteCode.trim() !== configuredInviteCode.trim()) {
+          const errMsg = "Código de convite inválido. Contacta o administrador para pedir acesso.";
+          setInviteError(errMsg);
+          toast.error(errMsg);
+          setBusy(false);
+          return;
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/dashboard`,
+            data: {
+              full_name: name.trim() || undefined,
+            },
           },
         });
+
         if (error) {
           toast.error(error.message);
         } else if (!data.session) {
-          toast.success("Verifica o teu email para confirmar a conta.");
+          toast.success("Conta criada! Verifica o teu email para confirmar a conta.");
+        } else {
+          toast.success("Conta criada com sucesso! Bem-vindo.");
+          nav({ to: "/dashboard" });
         }
       }
     } catch (err: any) {
@@ -134,11 +155,9 @@ function AuthPage() {
     setGoogleBusy(true);
     setOauthErrorDetails(null);
 
-    // O redirect deve apontar de volta para /auth onde processamos a sessão ou os erros
     const redirectUrl = `${window.location.origin}/auth`;
 
     try {
-      // 1. Se estivermos num iframe/preview gerido pelo Lovable, tentar primeiro o broker
       const isLovableHost =
         typeof window !== "undefined" &&
         (window.location.hostname.includes("lovable") || window.location.hostname.includes("gpt-eng"));
@@ -155,13 +174,11 @@ function AuthPage() {
             }
             return;
           }
-          console.warn("[Auth] Lovable broker retornou erro:", r.error);
         } catch (err) {
-          console.warn("[Auth] Lovable broker exceção:", err);
+          console.warn("[Auth] Lovable broker falhou:", err);
         }
       }
 
-      // 2. Supabase OAuth nativo
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -174,7 +191,6 @@ function AuthPage() {
       });
 
       if (error) {
-        console.error("[Auth] Erro retornado pelo Supabase signInWithOAuth:", error);
         if (error.message.includes("missing OAuth secret") || error.message.includes("Unsupported provider")) {
           setOauthErrorDetails("O Google OAuth requer que configures o Client ID e Client Secret no painel do Supabase.");
           toast.error("Google OAuth ainda não configurado no Supabase.");
@@ -182,11 +198,9 @@ function AuthPage() {
           toast.error(error.message);
         }
       } else if (data?.url) {
-        // Redirecionamento explícito para o Google OAuth URL
         window.location.href = data.url;
       }
     } catch (err: any) {
-      console.error("[Auth] Exceção no login Google:", err);
       toast.error(err?.message || "Ocorreu um erro ao iniciar sessão com o Google.");
     } finally {
       setGoogleBusy(false);
@@ -229,14 +243,13 @@ function AuthPage() {
                 {mode === "reset" && "Recuperar conta"}
               </h1>
               <p className="text-xs text-muted-foreground">
-                {mode === "in" && "Acede ao teu painel de giveaways"}
-                {mode === "up" && "Começa a sortear em poucos minutos"}
+                {mode === "in" && "Acede ao teu painel de organizador"}
+                {mode === "up" && "Registo exclusivo para organizadores"}
                 {mode === "reset" && "Vamos enviar-te um email de recuperação"}
               </p>
             </div>
           </div>
 
-          {/* Alerta caso o Google Provider ainda não esteja configurado no Supabase */}
           {oauthErrorDetails && (
             <div className="mb-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-800 dark:text-amber-200 space-y-1">
               <div className="flex items-center gap-1.5 font-bold">
@@ -249,7 +262,8 @@ function AuthPage() {
             </div>
           )}
 
-          {mode !== "reset" && (
+          {/* Botão Google apenas visível no modo de Entrada (quem já tem conta entra direto) */}
+          {mode === "in" && (
             <>
               <Button
                 type="button"
@@ -296,6 +310,25 @@ function AuthPage() {
           )}
 
           <form onSubmit={submit} className="space-y-4">
+            {/* Campo Nome (apenas no registo) */}
+            {mode === "up" && (
+              <div>
+                <Label htmlFor="name" className="text-xs font-semibold">
+                  Nome do Organizador
+                </Label>
+                <Input
+                  id="name"
+                  type="text"
+                  required
+                  placeholder="Ex: Bruno Gonçalves ou Nome da Marca"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="mt-1"
+                  disabled={busy || googleBusy}
+                />
+              </div>
+            )}
+
             <div>
               <Label htmlFor="email" className="text-xs font-semibold">
                 Email
@@ -342,10 +375,46 @@ function AuthPage() {
               </div>
             )}
 
+            {/* Campo Código de Convite (apenas no registo) */}
+            {mode === "up" && (
+              <div className="pt-1">
+                <div className="flex items-center justify-between mb-1">
+                  <Label htmlFor="inviteCode" className="text-xs font-semibold flex items-center gap-1.5">
+                    <KeyRound className="size-3.5 text-primary" />
+                    Código de Convite *
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground">Exclusivo</span>
+                </div>
+                <Input
+                  id="inviteCode"
+                  type="text"
+                  required
+                  placeholder="Insere o teu código de acesso"
+                  value={inviteCode}
+                  onChange={(e) => {
+                    setInviteCode(e.target.value);
+                    if (inviteError) setInviteError(null);
+                  }}
+                  className={`border-2 ${inviteError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                  disabled={busy || googleBusy}
+                />
+                {inviteError ? (
+                  <p className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-destructive">
+                    <ShieldAlert className="size-3.5 shrink-0" />
+                    {inviteError}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Apenas organizadores com código válido podem criar conta.
+                  </p>
+                )}
+              </div>
+            )}
+
             <Button
               variant="hero"
               size="lg"
-              className="w-full font-bold mt-2"
+              className="w-full font-bold mt-2 shadow-pop"
               disabled={busy || googleBusy}
             >
               {busy ? (
@@ -355,7 +424,7 @@ function AuthPage() {
               ) : mode === "in" ? (
                 "Entrar"
               ) : mode === "up" ? (
-                "Criar conta"
+                "Criar conta de Organizador"
               ) : (
                 "Enviar link de recuperação"
               )}
@@ -375,7 +444,10 @@ function AuthPage() {
               <button
                 type="button"
                 className="text-sm text-muted-foreground hover:text-foreground underline"
-                onClick={() => setMode(mode === "in" ? "up" : "in")}
+                onClick={() => {
+                  setMode(mode === "in" ? "up" : "in");
+                  setInviteError(null);
+                }}
               >
                 {mode === "in" ? "Ainda não tens conta? Cria uma" : "Já tens conta? Entra"}
               </button>
