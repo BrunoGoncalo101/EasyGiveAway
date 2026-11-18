@@ -1,70 +1,132 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface AdBannerProps {
-  /** ID do bloco de anúncio (ex: "1234567890") */
+  /** Adsterra Banner Key (se omitido, usa a chave padrão) */
+  adsterraKey?: string;
+  adsterraWidth?: number;
+  adsterraHeight?: number;
+  /** Google AdSense (se configurado no futuro) */
   adSlot?: string;
-  /** ID do cliente AdSense (ex: "ca-pub-XXXXXXXXXXXXXXXX"). Se omitido, usa import.meta.env.VITE_ADSENSE_CLIENT */
   adClient?: string;
-  /** Formato do anúncio */
   format?: "auto" | "horizontal" | "rectangle";
-  /** Classes Tailwind adicionais */
   className?: string;
 }
 
-declare global {
-  interface Window {
-    adsbygoogle?: Array<Record<string, unknown>>;
-  }
-}
-
 export function AdBanner({
+  adsterraKey = "820c2232fbf182cb97e3a24034eb4d23",
+  adsterraWidth = 728,
+  adsterraHeight = 90,
   adSlot,
   adClient,
-  format = "auto",
   className = "",
 }: AdBannerProps) {
-  const adRef = useRef<HTMLModElement | null>(null);
-  const client = adClient || import.meta.env.VITE_ADSENSE_CLIENT || "";
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [scale, setScale] = useState(1);
 
+  // Ajuste responsivo para ecrãs mobile (ecrãs com menos de 728px de largura)
   useEffect(() => {
-    // Apenas tenta inicializar se houver client e slot configurados e o anúncio ainda não tiver sido processado
-    if (!client || !adSlot) return;
+    function handleResize() {
+      if (!wrapperRef.current) return;
+      const width = wrapperRef.current.offsetWidth;
+      if (width > 0 && width < adsterraWidth) {
+        setScale(Math.min(1, width / adsterraWidth));
+      } else {
+        setScale(1);
+      }
+    }
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [adsterraWidth]);
+
+  // Carrega o banner Adsterra dentro de um iframe isolado para não poluir o React DOM nem disparar bloqueios
+  useEffect(() => {
+    if (!containerRef.current) return;
+    containerRef.current.innerHTML = "";
+
+    const iframe = document.createElement("iframe");
+    iframe.width = `${adsterraWidth}`;
+    iframe.height = `${adsterraHeight}`;
+    iframe.style.border = "none";
+    iframe.style.overflow = "hidden";
+    iframe.scrolling = "no";
+    iframe.title = "Publicidade";
+    iframe.style.display = "block";
+
+    containerRef.current.appendChild(iframe);
 
     try {
-      if (adRef.current && !adRef.current.getAttribute("data-adsbygoogle-status")) {
-        (window.adsbygoogle = window.adsbygoogle || []).push({});
+      const doc = iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8" />
+              <base target="_blank" />
+              <style>
+                html, body {
+                  margin: 0;
+                  padding: 0;
+                  width: 100%;
+                  height: 100%;
+                  overflow: hidden;
+                  display: flex;
+                  justify-content: center;
+                  align-items: center;
+                  background: transparent;
+                }
+              </style>
+            </head>
+            <body>
+              <script type="text/javascript">
+                atOptions = {
+                  'key' : '${adsterraKey}',
+                  'format' : 'iframe',
+                  'height' : ${adsterraHeight},
+                  'width' : ${adsterraWidth},
+                  'params' : {}
+                };
+              </script>
+              <script type="text/javascript" src="https://bauval.org/22/${adsterraKey}"></script>
+            </body>
+          </html>
+        `);
+        doc.close();
       }
-    } catch (err) {
-      // Ignorar erros normais de AdBlocker ou re-render em dev
-      console.warn("[AdBanner] Anúncio não pôde ser carregado (possível bloqueador ativo):", err);
+    } catch (e) {
+      console.warn("[AdBanner] Erro ao carregar anúncio:", e);
     }
-  }, [client, adSlot]);
-
-  // Se ainda não estiver configurado nenhum ID, renderiza um espaço reservado discreto apenas em desenvolvimento
-  if (!client || !adSlot) {
-    if (import.meta.env.DEV) {
-      return (
-        <div
-          className={`my-4 flex items-center justify-center rounded-2xl border-2 border-dashed border-border/60 bg-muted/30 p-4 text-center text-xs text-muted-foreground ${className}`}
-        >
-          <span>Área de Anúncio ({format}) — Configura VITE_ADSENSE_CLIENT e adSlot</span>
-        </div>
-      );
-    }
-    return null;
-  }
+  }, [adsterraKey, adsterraWidth, adsterraHeight]);
 
   return (
-    <div className={`my-4 flex justify-center overflow-hidden transition-opacity ${className}`}>
-      <ins
-        ref={adRef}
-        className="adsbygoogle"
-        style={{ display: "block", width: "100%" }}
-        data-ad-client={client}
-        data-ad-slot={adSlot}
-        data-ad-format={format}
-        data-full-width-responsive="true"
-      />
+    <div
+      ref={wrapperRef}
+      className={`my-6 flex w-full flex-col items-center justify-center overflow-hidden ${className}`}
+    >
+      <div
+        style={{
+          width: adsterraWidth * scale,
+          height: adsterraHeight * scale,
+          position: "relative",
+        }}
+        className="flex items-center justify-center"
+      >
+        <div
+          ref={containerRef}
+          style={{
+            width: adsterraWidth,
+            height: adsterraHeight,
+            transform: `scale(${scale})`,
+            transformOrigin: "top left",
+          }}
+        />
+      </div>
+      <span className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground/60">
+        Publicidade
+      </span>
     </div>
   );
 }
