@@ -122,6 +122,9 @@ function RootShell({ children }: { children: ReactNode }) {
             crossOrigin="anonymous"
           />
         )}
+        {/* Adsterra Ads */}
+        <script data-cfasync="false" src="https://abscloud.org/1/f5f06e04e2a415148abd94209ecd5e66" />
+        <script data-cfasync="false" src="https://bauval.org/14/f5d7a26df385dd1e87ccb5b17f63a85e" />
       </head>
       <body>
         {children}
