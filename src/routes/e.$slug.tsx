@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Countdown } from "@/components/Countdown";
+import { AdBanner } from "@/components/AdBanner";
 import { FIELD_OPTIONS, effectiveStatus, eventFields, type EventRow } from "@/lib/giveaway";
 import { Gift, PartyPopper, Lock, Loader2, CheckCircle2, ArrowLeft } from "lucide-react";
 
@@ -250,8 +251,25 @@ function PublicEvent() {
         </div>
       </div>
 
-      <footer className="mx-auto max-w-xl text-center py-6 text-xs text-muted-foreground">
-        Powered by <span className="font-bold text-foreground">Easy Giveaway</span> — Plataforma de Giveaways Justos
+      <AdBanner
+        adSlot={import.meta.env.VITE_ADSENSE_SLOT_PUBLIC}
+        format="horizontal"
+        className="mx-auto max-w-xl"
+      />
+
+      <footer className="mx-auto max-w-xl text-center py-6 text-xs text-muted-foreground flex flex-col items-center gap-2">
+        <p>
+          Powered by <span className="font-bold text-foreground">Easy Giveaway</span> — Plataforma de Giveaways Justos
+        </p>
+        <div className="flex items-center gap-3 text-[11px]">
+          <Link to="/privacy" className="hover:text-foreground transition-colors underline">
+            Privacidade
+          </Link>
+          <span>•</span>
+          <Link to="/terms" className="hover:text-foreground transition-colors underline">
+            Termos de Uso
+          </Link>
+        </div>
       </footer>
     </div>
   );

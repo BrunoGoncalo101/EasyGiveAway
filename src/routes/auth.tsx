@@ -499,6 +499,16 @@ function AuthPage() {
               </button>
             )}
           </div>
+
+          <div className="mt-6 pt-4 border-t border-border flex items-center justify-center gap-3 text-[11px] text-muted-foreground">
+            <Link to="/privacy" className="hover:text-foreground underline transition-colors">
+              Privacidade
+            </Link>
+            <span>•</span>
+            <Link to="/terms" className="hover:text-foreground underline transition-colors">
+              Termos de Uso
+            </Link>
+          </div>
         </div>
       </div>
 

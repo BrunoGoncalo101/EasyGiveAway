@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { effectiveStatus, eventFields, pickRandom, type EventRow } from "@/lib/giveaway";
 import { StatusBadge } from "@/components/StatusBadge";
+import { AdBanner } from "@/components/AdBanner";
 
 export const Route = createFileRoute("/_authenticated/events/$id")({
   head: () => ({
@@ -423,6 +424,9 @@ function EventAdmin() {
           </div>
         </div>
       </div>
+
+      {/* Banner de Anúncio discreto (fora da zona de gravação da roleta) */}
+      <AdBanner adSlot={import.meta.env.VITE_ADSENSE_SLOT_ADMIN} format="horizontal" />
 
       {/* Tabela de Inscrições com Filtro, Busca e Exportação */}
       <div className="rounded-3xl border-2 border-foreground bg-card shadow-pop overflow-hidden">

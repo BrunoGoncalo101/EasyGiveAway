@@ -109,10 +109,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) {
+  const adsenseClient = import.meta.env.VITE_ADSENSE_CLIENT;
+
   return (
     <html lang="pt">
       <head>
         <HeadContent />
+        {adsenseClient && (
+          <script
+            async
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseClient}`}
+            crossOrigin="anonymous"
+          />
+        )}
       </head>
       <body>
         {children}

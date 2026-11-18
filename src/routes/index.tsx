@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { AdBanner } from "@/components/AdBanner";
 import {
   Gift,
   QrCode,
@@ -143,6 +144,13 @@ function Index() {
         })}
       </section>
 
+      {/* Banner de Anúncio Discreto */}
+      <AdBanner
+        adSlot={import.meta.env.VITE_ADSENSE_SLOT_HOME}
+        format="horizontal"
+        className="mx-auto max-w-5xl"
+      />
+
       {/* Footer */}
       <footer className="mx-auto max-w-6xl border-t-2 border-foreground py-8 text-center text-sm text-muted-foreground flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2 font-display font-bold text-foreground">
@@ -152,6 +160,14 @@ function Index() {
         <p className="text-xs">
           Giveaways e sorteios justos para criadores, marcas e comunidades.
         </p>
+        <div className="flex items-center gap-4 text-xs">
+          <Link to="/privacy" className="hover:text-foreground transition-colors underline">
+            Privacidade
+          </Link>
+          <Link to="/terms" className="hover:text-foreground transition-colors underline">
+            Termos
+          </Link>
+        </div>
       </footer>
     </div>
   );
